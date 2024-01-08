@@ -1,0 +1,97 @@
+---
+name: Build and Push GitHub Actions Runner (ARM64) Image to ECR
+
+on:
+  push:
+
+env:
+  image_tag_suffix: ${{ github.ref == 'refs/heads/main' &&  '' || '-test' }}
+  image_tag_prefix: ubuntu-arm64
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  changes:
+    if: ${{ !startsWith(github.ref, 'refs/pull') }}
+    runs-on: "${{ vars.RUNNER_PREFIX }}_${{ github.repository_owner_id }}_${{ github.repository_id }}_${{ github.run_id }}_${{ github.run_attempt }}"
+    outputs:
+      img: ${{ steps.filter.outputs.img }}
+    steps:
+      - uses: dorny/paths-filter@v2
+        id: filter
+        with:
+          filters: |
+            img:
+              - 'ubuntu_arm64_runner_packer/**'
+              - '.github/workflows/ubuntu_arm64_runner.yml'
+
+  build_arm64_on_amd64:
+    needs: changes
+    if: ${{ needs.changes.outputs.img == 'true' }}
+    runs-on: "${{ vars.RUNNER_PREFIX }}_${{ github.repository_owner_id }}_${{ github.repository_id }}_${{ github.run_id }}_${{ github.run_attempt }}"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Yamllint
+        uses: karancode/yamllint-github-action@master
+        with:
+          yamllint_file_or_dir: ".github/workflows/ubuntu_arm64_runner.yml"
+          yamllint_strict: false
+          yamllint_comment: true
+
+      - name: Setup `packer`
+        uses: hashicorp/setup-packer@v2.0.0
+        id: setup
+        with:
+          version: latest
+
+      - name: qemu_static
+        id: multi_arch
+        run: |
+          docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
+
+      - name: Validate pkr.hcl for slim image
+        id: validate
+        run: |
+          packer plugins install github.com/hashicorp/docker
+
+          echo "Validate..."
+
+          packer validate \
+          -var 'aws_account_id=${{ secrets.AWS_ACCOUNT_ID }}' \
+          -var 'aws_region=${{ secrets.AWS_REGION }}' \
+          -var 'image_tag_suffix=${{ env.image_tag_suffix }}' \
+          -var 'ecr_repo=${{ vars.ECR_REPO }}' \
+          -var 'image_tag_prefix=${{ env.image_tag_prefix }}' \
+          $PWD/ubuntu_arm64_runner_packer/templates/ubuntu-runner-arm64.pkr.hcl
+
+      - name: Build the Image
+        id: build
+        run: |
+          echo "Building..."
+          packer build \
+          -var 'aws_account_id=${{ secrets.AWS_ACCOUNT_ID }}' \
+          -var 'aws_region=${{ secrets.AWS_REGION }}' \
+          -var 'image_tag_suffix=${{ env.image_tag_suffix }}' \
+          -var 'ecr_repo=${{ vars.ECR_REPO }}' \
+          -var 'image_tag_prefix=${{ env.image_tag_prefix }}' \
+          $PWD/ubuntu_arm64_runner_packer/templates/ubuntu-runner-arm64.pkr.hcl
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v3
+        with:
+          aws-region: ${{ secrets.AWS_REGION }}
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/${{ secrets.OIDC_ROLE }}
+          role-session-name: ${{ secrets.OIDC_ROLE }}-session-role
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+
+      - name: push image to Amazon ECR
+        id: push-image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        run: |
+          docker push $ECR_REGISTRY/${{ vars.ECR_REPO }}:${{ env.image_tag_prefix }}${{ env.image_tag_suffix }}
