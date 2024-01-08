@@ -5,7 +5,7 @@ on:
   push:
 
 env:
-  image_tag_suffix: ${{ github.ref == 'refs/heads/main' &&  '' || '-test' }}
+  image_tag_suffix: ${{ github.ref == 'refs/heads/main' &&  '""' || '-test' }}
   image_tag_prefix: ubuntu-arm64
 
 permissions:

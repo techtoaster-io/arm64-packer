@@ -293,7 +293,7 @@ build {
         ${var.image_folder}/tools/ubuntu_docker/graceful-stop.sh \
         ${var.image_folder}/tools/ubuntu_docker/wait.sh \
         ${var.image_folder}/tools/ubuntu_docker/update-status \
-        /usr/bin/" \
+        /usr/bin/ \
       && chmod +x /usr/bin/entrypoint.sh /usr/bin/startup.sh /usr/bin/logger.sh /usr/bin/graceful-stop.sh /usr/bin/wait.sh /usr/bin/update-status \
       && cp ${var.image_folder}/tools/ubuntu_docker/docker-exec.sh /usr/local/bin/docker \
       && chmod +x /usr/local/bin/docker \
