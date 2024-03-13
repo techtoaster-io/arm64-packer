@@ -108,7 +108,7 @@ source "docker" "arm64" {
     "ENV RUNNER_HOME /${var.runner_user}",
     "ENV HOME /home/${var.runner_user}",
     "ENV TARGETPLATFORM ${var.target_platform}",
-    "ENV TZ \"Australia/Sydney\"",
+    "ENV TZ \"UTC\"",
     "ENV RUNNER_VERSION ${var.runner_version}",
     "ENV RUNNER_ASSETS_DIR ${var.runner_assets_dir}",
     "VOLUME /var/lib/docker",
